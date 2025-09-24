@@ -1,0 +1,16 @@
+[project]
+name = "my-bookstore"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.2.6",
+    "django-elasticsearch-dsl>=9.0",
+    "django-elasticsearch-dsl-drf>=0.22.5",
+    "django-filter>=25.1",
+    "django-redis>=6.0.0",
+    "djangorestframework>=3.16.1",
+    "elasticsearch>=9.1.1",
+    "pillow>=11.3.0",
+]
