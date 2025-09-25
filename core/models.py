@@ -1,8 +1,9 @@
 from django.db import models
-from common.models import  BaseModel
+from django.contrib.postgres.search import SearchVectorField
+from django.contrib.postgres.indexes import GinIndex
 from django.conf import settings
+from common.models import BaseModel
 from datetime import date
-
 
 class Author(BaseModel):
     first_name = models.CharField(max_length=255)
@@ -15,24 +16,13 @@ class Author(BaseModel):
     def __str__(self):
         return self.first_name + ' ' + self.last_name
 
-    # In Author model
-    from datetime import date
 
-    def calculate_age(self,born, today):
-        return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-
-    def current_age(self):
-        if not self.date_of_birth:
-            return None
-
-        end_date = self.date_of_death or date.today()
-        return self.calculate_age(self.date_of_birth, end_date)
     @property
     def full_name(self):
         return self.first_name + ' ' + self.last_name
 
 class Publisher(BaseModel):
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=255)
     address = models.TextField(blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True, null=True)
@@ -48,7 +38,7 @@ class Publisher(BaseModel):
         verbose_name_plural = 'Publishers'
 
 class Category(models.Model):
-    name = models.CharField(max_length=200)
+    name = models.CharField(max_length=255)
     parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
     description = models.TextField(blank=True, null=True)
 
@@ -61,29 +51,19 @@ class Category(models.Model):
         verbose_name_plural = 'Categories'
 
 class Book(BaseModel):
-    title = models.CharField(max_length=500, db_index=True) # db_index برای جستجوی سریعتر
-    authors = models.ManyToManyField(Author, related_name='books')
+    title = models.CharField(max_length=255)
+    author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="books")
     description = models.TextField()
-    publication_date = models.DateField(null=True, blank=True)
-    publisher = models.ForeignKey(Publisher, on_delete=models.SET_NULL, null=True, blank=True)
-
-    def __str__(self):
-        return self.title
-
-    @property
-    def authors_indexing(self):
-        """Returns a string of all author names for full-text search."""
-        return [author.full_name for author in self.authors.all()]
-
-    @property
-    def has_pdf_indexing(self):
-        """Returns True if a PDF format exists for this book."""
-        return self.formats.filter(format_type='PDF').exists()
-
+    publication_date = models.DateField(null=True)
+    search_vector = SearchVectorField(null=True)
+    publisher = models.ForeignKey('Publisher', on_delete=models.PROTECT, related_name='books')
+    category = models.ForeignKey('Category', on_delete=models.SET_NULL, null=True, blank=True)
     class Meta:
-        ordering = ['title']
-        verbose_name = 'Book'
-        verbose_name_plural = 'Books'
+        indexes = [
+            GinIndex(fields=["search_vector"]),
+            models.Index(fields=["title", "author"]),
+            models.Index(fields=["created_at"]),  # For partitioning
+        ]
 
 
 class BookFormat(BaseModel):
@@ -101,12 +81,11 @@ class BookFormat(BaseModel):
     pdf_file = models.FileField(upload_to='pdfs/', null=True, blank=True)
 
     class Meta:
-        unique_together = ('book', 'format_type')
-        verbose_name = 'Book Format'
-        verbose_name_plural = 'Book Formats'
-
-    def __str__(self):
-        return f"{self.book.title} ({self.get_format_type_display()})"
+        unique_together = ("book", "format_type")
+        indexes = [
+            models.Index(fields=["format_type"]),
+            models.Index(fields=["created_at"]),  # For partitioning
+        ]
 
 
 class Comment(BaseModel):
@@ -116,7 +95,7 @@ class Comment(BaseModel):
     parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='replies')
 
     class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f"Comment by {self.user} on {self.book}"
+        indexes = [
+            models.Index(fields=["book", "created_at"]),
+            models.Index(fields=["parent"]),
+        ]
