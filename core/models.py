@@ -62,7 +62,7 @@ class Book(BaseModel):
         indexes = [
             GinIndex(fields=["search_vector"]),
             models.Index(fields=["title", "author"]),
-            models.Index(fields=["created_at"]),  # For partitioning
+            models.Index(fields=["created_at"]),  
         ]
 
 
@@ -84,7 +84,7 @@ class BookFormat(BaseModel):
         unique_together = ("book", "format_type")
         indexes = [
             models.Index(fields=["format_type"]),
-            models.Index(fields=["created_at"]),  # For partitioning
+            models.Index(fields=["created_at"]),  
         ]
 
 

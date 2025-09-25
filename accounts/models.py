@@ -14,13 +14,12 @@ class CustomUser(AbstractUser):
     updated_at = models.DateTimeField(auto_now=True)
     search_vector = SearchVectorField(null=True)
 
-    # Override groups and user_permissions to avoid reverse accessor clashes
     groups = models.ManyToManyField(
         'auth.Group',
         verbose_name='groups',
         blank=True,
         help_text='The groups this user belongs to.',
-        related_name='customuser_set',  # Unique related_name
+        related_name='customuser_set',  
         related_query_name='customuser',
     )
     user_permissions = models.ManyToManyField(
@@ -28,7 +27,7 @@ class CustomUser(AbstractUser):
         verbose_name='user permissions',
         blank=True,
         help_text='Specific permissions for this user.',
-        related_name='customuser_set',  # Unique related_name
+        related_name='customuser_set',  
         related_query_name='customuser',
     )
 

@@ -40,7 +40,6 @@ class BookFormatSerializer(serializers.ModelSerializer):
         model = BookFormat
         fields = ['id', 'book', 'format_type', 'price', 'stock', 'pdf_file']
 
-# Lightweight serializer for comment summaries
 class CommentSummarySerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     
@@ -74,7 +73,6 @@ class CommentSerializer(serializers.ModelSerializer):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
 
-# Lightweight serializers for nested data
 class AuthorSummarySerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     
@@ -97,7 +95,6 @@ class BookFormatSummarySerializer(serializers.ModelSerializer):
         model = BookFormat
         fields = ['id', 'format_type', 'price', 'stock']
 
-# Optimized list serializer - minimal data for performance
 class BookListSerializer(serializers.ModelSerializer):
     author = AuthorSummarySerializer(read_only=True)
     publisher = PublisherSummarySerializer(read_only=True)
@@ -135,7 +132,6 @@ class BookListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at']
 
-# Detailed serializer - full data for single book view
 class BookDetailSerializer(serializers.ModelSerializer):
     author = AuthorSerializer(read_only=True)
     publisher = PublisherSerializer(read_only=True)
@@ -143,7 +139,7 @@ class BookDetailSerializer(serializers.ModelSerializer):
     formats = BookFormatSerializer(many=True, read_only=True)
     recent_comments = serializers.SerializerMethodField()
     comments_count = serializers.SerializerMethodField()
-    average_rating = serializers.SerializerMethodField()  # If you add ratings later
+    average_rating = serializers.SerializerMethodField()  
     
     def get_recent_comments(self, obj):
         """Get recent top-level comments (non-replies) for preview."""
@@ -159,7 +155,6 @@ class BookDetailSerializer(serializers.ModelSerializer):
     
     def get_average_rating(self, obj):
         """Placeholder for future rating system."""
-        # You can implement this when you add a rating system
         return None
     
     class Meta:
@@ -183,7 +178,6 @@ class BookDetailSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cannot assign a deleted publisher to a book.")
         return value
 
-# Create/Update serializer - for write operations
 class BookCreateUpdateSerializer(serializers.ModelSerializer):
     author_id = serializers.UUIDField(write_only=True)
     publisher_id = serializers.UUIDField(write_only=True)
@@ -262,5 +256,5 @@ class BookSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         if not representation['category']:
-            representation['category'] = '-'  # Handle null category
+            representation['category'] = '-'  
         return representation

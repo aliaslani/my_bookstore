@@ -2,10 +2,8 @@ import os
 from pathlib import Path
 from decouple import config, Csv
 
-# Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Security settings
 SECRET_KEY = config("SECRET_KEY", default="your-default-secret-key-for-dev-only")
 DEBUG = config("DEBUG", default=False, cast=bool)
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", cast=Csv(), default="localhost,127.0.0.1")
@@ -18,7 +16,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.postgres",  # For PostgreSQL full-text search
+    "django.contrib.postgres",  
     "rest_framework",
     "core.apps.CoreConfig",
     "accounts.apps.AccountsConfig",
@@ -39,7 +37,6 @@ MIDDLEWARE = [
 ROOT_URLCONF = "bookstore.urls"
 WSGI_APPLICATION = "bookstore.wsgi.application"
 
-# Database configuration
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -48,17 +45,16 @@ DATABASES = {
         "PASSWORD": config("DB_PASSWORD", default="postgres"),
         "HOST": config("DB_HOST", default="localhost"),
         "PORT": config("DB_PORT", default="5432", cast=int),
-        "CONN_MAX_AGE": 600,  # Connection pooling for scalability
+        "CONN_MAX_AGE": 600,  
         "OPTIONS": {
-            "options": "-c search_path=public"  # Ensure correct schema for PostgreSQL
+            "options": "-c search_path=public" 
         },
     }
 }
 
-# REST Framework configuration
 REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
-    "PAGE_SIZE": 20,  # Smaller page size for 300k+ books
+    "PAGE_SIZE": 20,  
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
         "rest_framework.authentication.SessionAuthentication",
@@ -72,7 +68,6 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Cache configuration (Redis for scalability)
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -83,7 +78,6 @@ CACHES = {
     }
 }
 
-# Celery configuration for async tasks
 CELERY_BROKER_URL = config("CELERY_BROKER_URL", default="redis://127.0.0.1:6379/1")
 CELERY_RESULT_BACKEND = config(
     "CELERY_RESULT_BACKEND", default="redis://127.0.0.1:6379/1"
@@ -93,7 +87,6 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = "UTC"
 
-# Templates configuration
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -110,13 +103,11 @@ TEMPLATES = [
     },
 ]
 
-# Static and media files
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
-# Security settings for production
 SECURE_SSL_REDIRECT = config("SECURE_SSL_REDIRECT", default=True, cast=bool)
 SESSION_COOKIE_SECURE = config("SESSION_COOKIE_SECURE", default=True, cast=bool)
 CSRF_COOKIE_SECURE = config("CSRF_COOKIE_SECURE", default=True, cast=bool)
@@ -124,17 +115,13 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 
-# Internationalization
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-# bookstore_project/settings.py
 AUTH_USER_MODEL = 'accounts.CustomUser'
-# Logging configuration for monitoring
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -171,11 +158,11 @@ LOGGING = {
     },
 }
 
-# Additional settings for PostgreSQL full-text search
-POSTGRES_LANGUAGE_UNACCENT = True  # For case-insensitive search
+POSTGRES_LANGUAGE_UNACCENT = True  
 
-# Environment-specific overrides
 if DEBUG:
     INSTALLED_APPS += ["debug_toolbar"]
     MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]
     INTERNAL_IPS = ["127.0.0.1"]
+
+    from .settings.development import *

@@ -38,7 +38,6 @@ class AuthorViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Exclude soft-deleted authors
         if hasattr(Author, 'objects') and hasattr(Author.objects, 'filter'):
             queryset = queryset.filter(is_deleted=False) if hasattr(queryset.model, 'is_deleted') else queryset
         return queryset
@@ -71,7 +70,6 @@ class PublisherViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Exclude soft-deleted publishers
         if hasattr(Publisher, 'objects') and hasattr(Publisher.objects, 'filter'):
             queryset = queryset.filter(is_deleted=False) if hasattr(queryset.model, 'is_deleted') else queryset
         return queryset
@@ -104,7 +102,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Exclude soft-deleted if applicable (Category may not inherit BaseModel, but check)
         if hasattr(Category, 'is_deleted'):
             queryset = queryset.filter(is_deleted=False)
         return queryset
@@ -159,17 +156,14 @@ class BookViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = super().get_queryset()
         
-        # Exclude soft-deleted books
         if hasattr(Book, 'is_deleted'):
             queryset = queryset.filter(is_deleted=False)
         
-        # Optimize queryset based on action
         if self.action == 'list' or self.action == 'search':
             queryset = queryset.prefetch_related('formats', 'comments')
         elif self.action == 'retrieve':
             queryset = queryset.prefetch_related('formats', 'comments__user', 'comments__replies__user')
         
-        # Search functionality
         search_query = self.request.query_params.get('search', '').strip()
         if search_query:
             search_q = SearchQuery(search_query, config='english')
@@ -187,12 +181,10 @@ class BookViewSet(viewsets.ModelViewSet):
                 ).filter(search_vector_temp=search_q)
             queryset = queryset.order_by('-rank')
         
-        # Filter by format
         format_filter = self.request.query_params.get('format', '').upper()
         if format_filter in [choice[0] for choice in BookFormat.FormatTypes.choices]:
             queryset = queryset.filter(formats__format_type=format_filter).distinct()
         
-        # Additional filters
         category_id = self.request.query_params.get('category')
         if category_id:
             queryset = queryset.filter(category_id=category_id)
@@ -242,16 +234,6 @@ class BookViewSet(viewsets.ModelViewSet):
             return Response(detail_serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # @action(detail=False, methods=['get'])
-    # def search(self, request):
-    #     queryset = self.filter_queryset(self.get_queryset())
-    #     page = self.paginate_queryset(queryset)
-    #     if page is not None:
-    #         serializer = self.get_serializer(page, many=True)
-    #         return self.get_paginated_response(serializer.data)
-    #     serializer = self.get_serializer(queryset, many=True)
-    #     return Response(serializer.data)
-
     @action(detail=True, methods=['get'])
     def formats(self, request, pk=None):
         book = self.get_object()
@@ -298,10 +280,8 @@ class BookFormatViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Exclude soft-deleted formats
         if hasattr(BookFormat, 'is_deleted'):
             queryset = queryset.filter(is_deleted=False)
-        # Filter by book if specified
         book_id = self.request.query_params.get('book')
         if book_id:
             queryset = queryset.filter(book_id=book_id)
@@ -329,14 +309,11 @@ class CommentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
-        # Exclude soft-deleted comments
         if hasattr(Comment, 'is_deleted'):
             queryset = queryset.filter(is_deleted=False)
-        # Filter by book
         book_id = self.request.query_params.get('book')
         if book_id:
             queryset = queryset.filter(book_id=book_id)
-        # Include parent filter for threads
         parent_id = self.request.query_params.get('parent')
         if parent_id:
             queryset = queryset.filter(parent_id=parent_id)
@@ -386,10 +363,10 @@ class BookSearchView(APIView):
     def get(self, request):
         query = request.query_params.get('q', '').strip()
         publication_year = request.query_params.get('publication_year', None)
-        author = request.query_params.get('author', None)          # author name or ID
-        title = request.query_params.get('title', None)            # partial or exact title
-        category = request.query_params.get('category', None)      # category ID or name
-        publisher = request.query_params.get('publisher', None)    # publisher ID or name
+        author = request.query_params.get('author', None)          
+        title = request.query_params.get('title', None)            
+        category = request.query_params.get('category', None)      
+        publisher = request.query_params.get('publisher', None)    
 
         page = int(request.query_params.get('page', 1))
         per_page = int(request.query_params.get('per_page', 20))
@@ -397,10 +374,8 @@ class BookSearchView(APIView):
         if not (query or publication_year or author or title or category or publisher):
             return Response({"error": "Please provide a search query or filter"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Initialize queryset
         queryset = Book.objects.filter(is_deleted=False).select_related('author', 'publisher', 'category')
 
-        # Full-text search across multiple fields
         if query:
             search_query = SearchQuery(query, config='english')
             search_vector = (
@@ -415,14 +390,12 @@ class BookSearchView(APIView):
                 rank=SearchRank(search_vector, search_query)
             ).filter(search_vector=search_query)
 
-        # Filter by publication year
         if publication_year:
             try:
                 queryset = queryset.filter(publication_date__year=int(publication_year))
             except ValueError:
                 return Response({"error": "Invalid publication year"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Filter by author (support ID or name)
         if author:
             if author.isdigit():
                 queryset = queryset.filter(author_id=int(author))
@@ -432,31 +405,26 @@ class BookSearchView(APIView):
                     Q(author__last_name__icontains=author)
                 )
 
-        # Filter by title (partial match)
         if title:
             queryset = queryset.filter(title__icontains=title)
 
-        # Filter by category (ID or name)
         if category:
             if category.isdigit():
                 queryset = queryset.filter(category_id=int(category))
             else:
                 queryset = queryset.filter(category__name__icontains=category)
 
-        # Filter by publisher (ID or name)
         if publisher:
             if publisher.isdigit():
                 queryset = queryset.filter(publisher_id=int(publisher))
             else:
                 queryset = queryset.filter(publisher__name__icontains=publisher)
 
-        # Order by relevance (if search) or latest publication
         if query:
             queryset = queryset.order_by('-rank', '-publication_date')
         else:
             queryset = queryset.order_by('-publication_date')
 
-        # Paginate results
         paginator = Paginator(queryset.distinct(), per_page)
         try:
             page_obj = paginator.page(page)
@@ -464,7 +432,6 @@ class BookSearchView(APIView):
             logger.error(f"Pagination error: {str(e)}")
             return Response({"error": "Invalid page number"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Serialize
         serializer = BookListSerializer(page_obj.object_list, many=True, context={'request': request})
         return Response({
             'results': serializer.data,
