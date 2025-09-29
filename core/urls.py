@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AuthorViewSet, BookViewSet, BookFormatViewSet, CommentViewSet, BookSearchView 
+from .views import AuthorViewSet, BookViewSet, BookFormatViewSet, CommentViewSet
 
 router = DefaultRouter()
 router.register(r"authors", AuthorViewSet)
@@ -10,5 +10,4 @@ router.register(r"comments", CommentViewSet)
 
 urlpatterns = [
     path("", include(router.urls)),
-    path('search/', BookSearchView.as_view(), name='global-search'),
 ]

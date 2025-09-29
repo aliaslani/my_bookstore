@@ -14,9 +14,9 @@ from .serializers import (
 )
 from rest_framework import serializers
 from rest_framework.views import APIView
-from django.core.paginator import Paginator
+from django.core.paginator import Paginator, EmptyPage
 import logging
-
+from core.search import SearchService
 
 logger = logging.getLogger(__name__)
 
@@ -42,17 +42,7 @@ class AuthorViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_deleted=False) if hasattr(queryset.model, 'is_deleted') else queryset
         return queryset
 
-    @action(detail=True, methods=['get'])
-    def books(self, request, pk=None):
-        """Get books by author."""
-        author = self.get_object()
-        books = author.books.filter(is_deleted=False).select_related('publisher', 'category').prefetch_related('formats')
-        page = self.paginate_queryset(books)
-        if page is not None:
-            serializer = BookSerializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-        serializer = BookSerializer(books, many=True, context={'request': request})
-        return Response(serializer.data)
+    
 
 
 class PublisherViewSet(viewsets.ModelViewSet):
@@ -74,17 +64,6 @@ class PublisherViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(is_deleted=False) if hasattr(queryset.model, 'is_deleted') else queryset
         return queryset
 
-    @action(detail=True, methods=['get'])
-    def books(self, request, pk=None):
-        """Get books by publisher."""
-        publisher = self.get_object()
-        books = publisher.books.filter(is_deleted=False).select_related('author', 'category').prefetch_related('formats')
-        page = self.paginate_queryset(books)
-        if page is not None:
-            serializer = BookSerializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-        serializer = BookSerializer(books, many=True, context={'request': request})
-        return Response(serializer.data)
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -105,31 +84,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
         if hasattr(Category, 'is_deleted'):
             queryset = queryset.filter(is_deleted=False)
         return queryset
-
-    @action(detail=True, methods=['get'])
-    def books(self, request, pk=None):
-        """Get books in this category."""
-        category = self.get_object()
-        books = Book.objects.filter(category=category, is_deleted=False).select_related('author', 'publisher').prefetch_related('formats')
-        page = self.paginate_queryset(books)
-        if page is not None:
-            serializer = BookSerializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-        serializer = BookSerializer(books, many=True, context={'request': request})
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['get'])
-    def subcategories(self, request, pk=None):
-        """Get subcategories."""
-        category = self.get_object()
-        subcats = category.category_set.all().order_by('name')
-        page = self.paginate_queryset(subcats)
-        if page is not None:
-            serializer = CategorySerializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-        serializer = CategorySerializer(subcats, many=True, context={'request': request})
-        return Response(serializer.data)
-
 
 class BookViewSet(viewsets.ModelViewSet):
     """
@@ -265,6 +219,68 @@ class BookViewSet(viewsets.ModelViewSet):
             return self.get_paginated_response(serializer.data)
         serializer = CommentSerializer(comments, many=True, context={'request': request})
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def search(self, request):
+        """
+        /books/search/?q=...&author=...&publisher=...&category=...&page=1&per_page=20
+        Returns ranked results using Postgres full-text search and fuzzy fallback.
+        """
+        q = request.query_params.get("q", "").strip()
+        if not q:
+            return Response({"error": "q parameter required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Base queryset: filter out deleted, select_related for serialization speed
+        base_qs = self.get_queryset().filter(is_deleted=False).select_related("author", "publisher", "category").distinct()
+
+        # Apply optional filters (author, publisher, category, year, format, price)
+        author = request.query_params.get("author")
+        publisher = request.query_params.get("publisher")
+        category = request.query_params.get("category")
+        pub_year = request.query_params.get("publication_year")
+        if author:
+            if author.isdigit():
+                base_qs = base_qs.filter(author_id=int(author))
+            else:
+                base_qs = base_qs.filter(Q(author__first_name__icontains=author) | Q(author__last_name__icontains=author))
+        if publisher:
+            if publisher.isdigit():
+                base_qs = base_qs.filter(publisher_id=int(publisher))
+            else:
+                base_qs = base_qs.filter(publisher__name__icontains=publisher)
+        if category:
+            if category.isdigit():
+                base_qs = base_qs.filter(category_id=int(category))
+            else:
+                base_qs = base_qs.filter(category__name__icontains=category)
+        if pub_year:
+            try:
+                base_qs = base_qs.filter(publication_date__year=int(pub_year))
+            except ValueError:
+                return Response({"error": "Invalid publication_year"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Use SearchService to get ranked queryset
+        ranked_qs = SearchService.full_text_search(base_qs, q, use_materialized_vector=True, trigram_fallback=True)
+
+        # paginate using DRF pagination if you prefer, here simple paginator example:
+        page = int(request.query_params.get("page", 1))
+        per_page = int(request.query_params.get("per_page", 20))
+        paginator = Paginator(ranked_qs.distinct(), per_page)
+        try:
+            page_obj = paginator.page(page)
+        except EmptyPage:
+            return Response({"results": [], "count": 0, "num_pages": paginator.num_pages, "current_page": page})
+
+        serializer = BookListSerializer(page_obj.object_list, many=True, context={"request": request})
+        return Response({
+            "results": serializer.data,
+            "count": paginator.count,
+            "num_pages": paginator.num_pages,
+            "current_page": page,
+        }, status=status.HTTP_200_OK)
+    
+    
+
 class BookFormatViewSet(viewsets.ModelViewSet):
     """
     ViewSet for BookFormats: CRUD for physical/PDF/EPUB/AUDIO variants.
@@ -357,85 +373,15 @@ class CommentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(comments, many=True, context={'request': request})
         return Response(serializer.data)
     
-
-
-class BookSearchView(APIView):
-    def get(self, request):
-        query = request.query_params.get('q', '').strip()
-        publication_year = request.query_params.get('publication_year', None)
-        author = request.query_params.get('author', None)          
-        title = request.query_params.get('title', None)            
-        category = request.query_params.get('category', None)      
-        publisher = request.query_params.get('publisher', None)    
-
-        page = int(request.query_params.get('page', 1))
-        per_page = int(request.query_params.get('per_page', 20))
-
-        if not (query or publication_year or author or title or category or publisher):
-            return Response({"error": "Please provide a search query or filter"}, status=status.HTTP_400_BAD_REQUEST)
-
-        queryset = Book.objects.filter(is_deleted=False).select_related('author', 'publisher', 'category')
-
-        if query:
-            search_query = SearchQuery(query, config='english')
-            search_vector = (
-                SearchVector('title', weight='A', config='english') +
-                SearchVector('description', weight='B', config='english') +
-                SearchVector('author__first_name', weight='A', config='english') +
-                SearchVector('author__last_name', weight='A', config='english') +
-                SearchVector('publisher__name', weight='B', config='english') +
-                SearchVector('category__name', weight='B', config='english')
-            )
-            queryset = queryset.annotate(
-                rank=SearchRank(search_vector, search_query)
-            ).filter(search_vector=search_query)
-
-        if publication_year:
-            try:
-                queryset = queryset.filter(publication_date__year=int(publication_year))
-            except ValueError:
-                return Response({"error": "Invalid publication year"}, status=status.HTTP_400_BAD_REQUEST)
-
-        if author:
-            if author.isdigit():
-                queryset = queryset.filter(author_id=int(author))
-            else:
-                queryset = queryset.filter(
-                    Q(author__first_name__icontains=author) | 
-                    Q(author__last_name__icontains=author)
-                )
-
-        if title:
-            queryset = queryset.filter(title__icontains=title)
-
-        if category:
-            if category.isdigit():
-                queryset = queryset.filter(category_id=int(category))
-            else:
-                queryset = queryset.filter(category__name__icontains=category)
-
-        if publisher:
-            if publisher.isdigit():
-                queryset = queryset.filter(publisher_id=int(publisher))
-            else:
-                queryset = queryset.filter(publisher__name__icontains=publisher)
-
-        if query:
-            queryset = queryset.order_by('-rank', '-publication_date')
-        else:
-            queryset = queryset.order_by('-publication_date')
-
-        paginator = Paginator(queryset.distinct(), per_page)
-        try:
-            page_obj = paginator.page(page)
-        except Exception as e:
-            logger.error(f"Pagination error: {str(e)}")
-            return Response({"error": "Invalid page number"}, status=status.HTTP_400_BAD_REQUEST)
-
-        serializer = BookListSerializer(page_obj.object_list, many=True, context={'request': request})
-        return Response({
-            'results': serializer.data,
-            'count': paginator.count,
-            'num_pages': paginator.num_pages,
-            'current_page': page,
-        }, status=status.HTTP_200_OK)
+    def update(self, request, *args, **kwargs):
+        """Only allow comment owner to update."""
+        instance = self.get_object()
+        if instance.user != request.user:
+            return Response({'error': 'You can only edit your own comments.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+    def destroy(self, request, *args, **kwargs):
+        """Only allow comment owner to delete."""
+        instance = self.get_object()
+        if instance.user != request.user:
+            return Response({'error': 'You can only delete your own comments.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)

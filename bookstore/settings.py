@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from re import S
 from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -7,7 +8,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config("SECRET_KEY", default="your-default-secret-key-for-dev-only")
 DEBUG = config("DEBUG", default=False, cast=bool)
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", cast=Csv(), default="localhost,127.0.0.1")
-
 # Application definition
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -122,6 +122,9 @@ USE_TZ = True
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 AUTH_USER_MODEL = 'accounts.CustomUser'
+LOG_DIR = Path(BASE_DIR / "logs")
+if not LOG_DIR.exists():
+    os.makedirs(LOG_DIR, exist_ok=True)
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -164,5 +167,5 @@ if DEBUG:
     INSTALLED_APPS += ["debug_toolbar"]
     MIDDLEWARE += ["debug_toolbar.middleware.DebugToolbarMiddleware"]
     INTERNAL_IPS = ["127.0.0.1"]
-
-    from .settings.development import *
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+    from .setting.development import *

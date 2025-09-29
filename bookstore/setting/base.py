@@ -27,8 +27,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'bookstore_project.urls'
-WSGI_APPLICATION = 'bookstore_project.wsgi.application'
+ROOT_URLCONF = 'bookstore.urls'
+WSGI_APPLICATION = 'bookstore.wsgi.application'
 
 DATABASES = {
     'default': {
