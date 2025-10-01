@@ -17,7 +17,7 @@ from rest_framework.views import APIView
 from django.core.paginator import Paginator, EmptyPage
 import logging
 from core.search import SearchService
-
+from django.core.cache import cache
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
@@ -108,6 +108,10 @@ class BookViewSet(viewsets.ModelViewSet):
             return BookDetailSerializer
 
     def get_queryset(self):
+        cache_key = f"books_list_{self.request.query_params}"
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
         queryset = super().get_queryset()
         
         if hasattr(Book, 'is_deleted'):
@@ -167,7 +171,7 @@ class BookViewSet(viewsets.ModelViewSet):
         
         if self.request.query_params.get('available') == 'true':
             queryset = queryset.filter(formats__stock__gt=0).distinct()
-        
+        cache.set(cache_key, queryset, 300)
         return queryset
 
     def create(self, request, *args, **kwargs):
